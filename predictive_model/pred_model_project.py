@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 
+
 def infer_columns(df: pd.DataFrame, target: str):
     X = df.drop(columns=[target])
     cat_cols = list(X.select_dtypes(include=["object", "category"]).columns)
