@@ -8,7 +8,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier      # ← CHANGED
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 
 def infer_columns(df: pd.DataFrame, target: str):
@@ -34,29 +34,27 @@ def plot_confusion_matrix(cm, labels, outpath="confusion_matrix.png", title="Con
     fig.savefig(outpath); plt.close(fig)
 
 def main():
-    parser = argparse.ArgumentParser(description="Baseline student outcome model (single-file).")
-    parser.add_argument("--csv", default=os.path.join("predictive_model", "student_data.csv"),
-                        help="CSV yolu (default: predictive_model/student_data.csv)")
-    parser.add_argument("--target", default="Target", help="Hedef sütun adı (default: Target)")
-    parser.add_argument("--sep", default=";", help="CSV ayraç (default: ;)")
-    parser.add_argument("--test_size", type=float, default=0.20, help="Test oranı (default: 0.20)")
-    parser.add_argument("--seed", type=int, default=42, help="Rastgele tohum (default: 42)")
-    parser.add_argument("--save_model", default=os.path.join("predictive_model", "baseline_model.joblib"),
-                        help="Model kaydetme yolu")
-    parser.add_argument("--pred_out", default=os.path.join("predictive_model", "predictions.csv"),
-                        help="Tahmin çıktısı CSV yolu")
-    parser.add_argument("--cm_out", default=os.path.join("predictive_model", "confusion_matrix.png"),
-                        help="Karışıklık matrisi görsel yolu")
+    parser = argparse.ArgumentParser(description="Baseline student outcome model (Random Forest).")
+    parser.add_argument("--csv", default="/Users/aybikealtunbas/practical-course/predictive_model/student_data.csv",
+                        help="Absolute path to CSV file")
+    parser.add_argument("--target", default="Target", help="Target column name (default: Target)")
+    parser.add_argument("--sep", default=";", help="CSV separator (default: ;)")
+    parser.add_argument("--test_size", type=float, default=0.20, help="Test split ratio (default: 0.20)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    parser.add_argument("--save_model", default="/Users/aybikealtunbas/practical-course/predictive_model/baseline_model.joblib",
+                        help="Model save path")
+    parser.add_argument("--pred_out", default="/Users/aybikealtunbas/practical-course/predictive_model/predictions.csv",
+                        help="Prediction CSV output path")
+    parser.add_argument("--cm_out", default="/Users/aybikealtunbas/practical-course/predictive_model/confusion_matrix.png",
+                        help="Confusion matrix image path")
     args = parser.parse_args()
 
     df = pd.read_csv(args.csv, sep=args.sep, engine="python", encoding="utf-8-sig")
 
-    clean_cols = []
-    for c in df.columns:
-        c2 = str(c).replace("\ufeff", "").strip().replace(" ", "_")
-        clean_cols.append(c2)
-    df.columns = clean_cols
+    # Clean column names
+    df.columns = [str(c).replace("\ufeff", "").strip().replace(" ", "_") for c in df.columns]
 
+    # Determine target column
     cand_target = args.target.replace(" ", "_")
     if cand_target in df.columns:
         target_col = cand_target
@@ -95,7 +93,7 @@ def main():
         remainder="drop"
     )
 
-    # ------------------------ ONLY CHANGE HERE ------------------------
+    # ------------------------ RANDOM FOREST ------------------------
     clf = RandomForestClassifier(
         n_estimators=300,
         class_weight="balanced",
@@ -104,7 +102,6 @@ def main():
     # ------------------------------------------------------------------
 
     pipe = Pipeline([("pre", pre), ("clf", clf)])
-
     pipe.fit(X_train, y_train)
 
     y_pred = pipe.predict(X_test)
