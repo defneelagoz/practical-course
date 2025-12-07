@@ -27,7 +27,7 @@ st.sidebar.header("Configuration")
 def load_resources():
     # Paths
     model_path = os.path.join("predictive_model", "baseline_model.joblib")
-    data_path = os.path.join("predictive_model", "student_data.csv")
+    data_path = os.path.join("predictive_model", "student_data_2.csv")
     
     # Load
     if not os.path.exists(model_path):
