@@ -73,35 +73,56 @@ def main():
         cm_out = "gam_confusion_matrix_student2.png"
 
     args = Args()
-    base_path = Path(__file__).parent.resolve() if "__file__" in locals() else Path().resolve()
     
-    # Robust search for CSV
-    possible_paths = [
-        Path(args.csv),
-        base_path / args.csv,
-        base_path / "gam" / args.csv,
-        base_path.parent / "gam" / args.csv, # up one level then into gam
-        Path(r"c:\Users\wwwut\practical-course\predictive_model\gam\student_data_2.csv"),
+    # Robust search for CSV (recursive up to a few levels + standard relative paths)
+    base_path = Path(__file__).parent.resolve() if "__file__" in locals() else Path().resolve()
+    current_path = base_path
+    csv_path = None
+    
+    # Search locations:
+    # 1. Explicit arg path
+    # 2. Base path (script dir)
+    # 3. Base path / gam
+    # 4. Climbing up parent directories
+    
+    potential_dirs = [
+        Path(args.csv).parent, 
+        base_path,
+        base_path / "gam",
+        base_path / "predictive_model" / "gam",
     ]
     
-    csv_path = None
-    for p in possible_paths:
-        try:
-            if p.exists():
-                csv_path = p
-                print(f"Found CSV at: {p}")
-                break
-        except:
-            continue
+    # Add parents up to 3 levels
+    curr = base_path
+    for _ in range(3):
+        curr = curr.parent
+        potential_dirs.append(curr)
+        potential_dirs.append(curr / "predictive_model" / "gam")
+        potential_dirs.append(curr / "gam")
+
+    print("Searching for CSV in:")
+    seen = set()
+    for d in potential_dirs:
+        if d in seen: continue
+        seen.add(d)
+        
+        target = d / "student_data_2.csv"
+        # print(f"  Checking: {target}") # Debug only if needed
+        if target.exists():
+            csv_path = target
+            print(f"FOUND CSV at: {target}")
+            break
             
     if csv_path is None:
         print(f"Current Working Directory: {os.getcwd()}")
-        raise FileNotFoundError(f"Could not find {args.csv} in any common locations.")
+        print("Search failed. Please ensure 'student_data_2.csv' is in a standard project directory.")
+        raise FileNotFoundError(f"Could not find {args.csv} in project directories.")
     
-    # Setup Output Paths
-    args.save_model = base_path / args.save_model
-    args.pred_out = base_path / args.pred_out
-    args.cm_out = base_path / args.cm_out
+    # Setup Output Paths relative to the found CSV or script
+    output_dir = csv_path.parent
+    args.save_model = output_dir / "gam_model_student2.joblib"
+    args.pred_out = output_dir / "gam_predictions_student2.csv"
+    args.cm_out = output_dir / "gam_confusion_matrix_student2.png"
 
     print("Loading CSV...")
     # Use decimal=',' for European format
