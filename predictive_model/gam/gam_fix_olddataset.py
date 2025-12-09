@@ -211,7 +211,7 @@ def main():
     print("\nRunning explicit 3-Fold Cross-Validation on the training set (Verification)...")
     cv_scores = cross_val_score(gam_simple, X_train_pre, y_train, cv=3, scoring='accuracy')
     print(f"3-Fold CV Accuracy: {np.mean(cv_scores):.4f} (+/- {np.std(cv_scores):.4f})")
-
+    ###test
     y_pred = gam.predict(X_test_pre)
     print("\n=== Classification Report (test set) ===")
     print(classification_report(y_test, y_pred, digits=3, target_names=label_enc.classes_))
