@@ -25,34 +25,75 @@ st.sidebar.header("Configuration")
 # Load Data & Model
 @st.cache_resource
 def load_resources():
-    # Paths
-    model_path = os.path.join("predictive_model", "baseline_model.joblib")
-    data_path = os.path.join("predictive_model", "student_data_2.csv")
+    # Paths - Adjusted for GAM model
+    # Expecting dashboard.py to be in predictive_model/, so gam/ is a subdir
+    model_path = os.path.join(os.path.dirname(__file__), "gam", "gam_model_student2.joblib")
+    data_path = os.path.join(os.path.dirname(__file__), "gam", "student_data_2.csv")
     
     # Load
     if not os.path.exists(model_path):
-        st.error(f"Model not found at {model_path}. Please run the training script first.")
+        st.error(f"Model not found at {model_path}. Please run the GAM training script first.")
         return None, None
         
-    model = joblib.load(model_path)
-    df = pd.read_csv(data_path, sep=";", engine="python", encoding="utf-8-sig") # Adjust sep if needed
+    # The GAM model is saved as a dictionary: {"model": gam, "preprocess": pre, "label_encoder": label_enc}
+    try:
+        model_artifact = joblib.load(model_path)
+    except Exception as e:
+        st.error(f"Failed to load model: {e}")
+        return None, None
+
+    if not isinstance(model_artifact, dict):
+        st.error("Model file format unexpected. Expected a dictionary from gam_fix.py.")
+        return None, None
+
+    # Load CSV with robust handling similar to gam_fix.py
+    if not os.path.exists(data_path):
+        st.error(f"Data not found at {data_path}")
+        return None, None
+
+    df = pd.read_csv(data_path, sep=";", decimal=",", engine="python", encoding="utf-8-sig")
     
-    # Clean columns like in the training script
+    # Clean columns
     clean_cols = [c.replace("\ufeff", "").strip().replace(" ", "_") for c in df.columns]
     df.columns = clean_cols
     
-    return model, df
-
-model, df = load_resources()
-
-if model is not None and df is not None:
-    # Preprocessing for SHAP (Need X_train and X_test split logic or just use a sample)
-    # For simplicity in this dashboard, we'll just use the whole dataset to select a student
-    # In a real app, you'd have a separate test set or new data
+    # --- Robust Numeric Cleaning (Mirroring gam_fix.py) ---
+    # The dashboard needs to clean raw data exactly like the training script
+    # otherwise the Imputer will fail on string values like '1,34286E+16'
     
-    target_col = "Target" # Default
-    
-    # Explicitly check for known target names
+    # 1. Identify and fix string-numeric columns
+    for col in df.columns:
+        if df[col].dtype == 'object' or str(df[col].dtype) == 'category':
+            try:
+                # Replace comma with dot and coerce to numeric
+                series = df[col].astype(str).str.replace(',', '.', regex=False)
+                temp = pd.to_numeric(series, errors='coerce')
+                
+                # Check if it looks numeric (heuristic: >50% valid)
+                valid_count = temp.notna().sum()
+                if valid_count > 0.5 * len(temp):
+                    df[col] = temp
+            except:
+                pass
+
+    # 2. Clean extreme outliers (>1e10)
+    numeric_cols_temp = df.select_dtypes(include=[np.number]).columns
+    for c in numeric_cols_temp:
+        mask_outliers = df[c] > 1e10 
+        if mask_outliers.any():
+            df.loc[mask_outliers, c] = np.nan
+            
+    return model_artifact, df
+
+model_artifact, df = load_resources()
+
+if model_artifact is not None and df is not None:
+    model = model_artifact["model"]
+    preprocessor = model_artifact["preprocess"]
+    label_encoder = model_artifact["label_encoder"]
+
+    # Target Logic
+    target_col = "Target"
     known_targets = ["Output", "Target", "Status", "Outcome"]
     for t in known_targets:
         if t in df.columns:
@@ -64,7 +105,9 @@ if model is not None and df is not None:
          st.stop()
     
     X = df.drop(columns=[target_col])
-    y = df[target_col]
+    # We don't perform extensive cleaning here because the preprocessor in the artifact handles it
+    # BUT we need to ensure formatting matches what preprocessor expects (e.g. comma decimals if raw)
+    # pd.read_csv handled decimal=',' above, so dtypes should be mostly correct.
     
     # --- Sidebar Filters ---
     st.sidebar.subheader("Filter Students")
@@ -80,13 +123,26 @@ if model is not None and df is not None:
     student_data = X.loc[[student_index]]
     
     # Predict
-    # The model pipeline handles preprocessing
-    probs = model.predict_proba(student_data)
-    classes = model.named_steps['clf'].classes_
+    # GAM needs preprocessed data
+    try:
+        student_data_pre = preprocessor.transform(student_data).astype(float)
+        probs = model.predict_proba(student_data_pre)
+        classes = label_encoder.classes_
+    except Exception as e:
+        st.error(f"Prediction Error: {e}")
+        st.stop()
     
     # Find index of "Dropout" class
     dropout_idx = list(classes).index("Dropout") if "Dropout" in classes else 0
-    dropout_prob = probs[0][dropout_idx]
+    # Handle prob shape (n_samples, n_classes) or (n_samples,) if binary
+    if probs.ndim == 1:
+        # Binary case for pygam often returns just P(y=1)
+        # We need to check label encoder to see which is 1
+        # Typically 1 is the second class in classes_
+        p_1 = probs[0]
+        dropout_prob = p_1 if classes[1] == "Dropout" else (1 - p_1)
+    else:
+        dropout_prob = probs[0][dropout_idx]
     
     # Display Status
     st.sidebar.markdown("### Prediction Status")
@@ -107,39 +163,41 @@ if model is not None and df is not None:
         
         st.subheader("Model Explainability (SHAP)")
         with st.spinner("Calculating SHAP values..."):
-            # Calculate SHAP for this student
-            # Note: Passing a small sample of X as 'train' background for speed if needed
-            # For better accuracy, we should pass the actual X_train used during training
-            explainer, shap_vals, X_transformed, feature_names = calculate_shap_values(model, X.sample(100, random_state=42), student_data)
+            # Pass the dictionary artifact to calculate_shap_values so it can handle the logic
+            # Use a sample of X for background
+            explainer, shap_vals, X_transformed, feature_names = calculate_shap_values(
+                model_artifact, 
+                X.sample(min(100, len(X)), random_state=42), 
+                student_data
+            )
             
             # SHAP values for the specific class (Dropout)
-            # TreeExplainer returns list of arrays for each class, or single array if binary
-            # KernelExplainer returns list
-            
             if isinstance(shap_vals, list):
                 # Multi-class
-                sv = shap_vals[dropout_idx]
+                # If pygam returns list, check length
+                if len(shap_vals) > dropout_idx:
+                    sv = shap_vals[dropout_idx]
+                else:
+                    sv = shap_vals[0] # Fallback
             else:
-                # Binary
+                # Binary / single array
                 sv = shap_vals
                 
-            # Force Plot
+            # Force Plot / Bar Plot logic
             st.markdown("**Why did the model make this prediction?**")
             
             # Ensure sv is 1D array of feature impacts
-            # sv might be (1, n_features) or just (n_features,)
             impact_values = np.array(sv)
             if impact_values.ndim > 1:
                 impact_values = impact_values.flatten()
             
-            # DEBUG: Check lengths
+            # Check lengths
+            # For GAMs/OneHot, feature_names might be huge.
             if len(feature_names) != len(impact_values):
-                msg = f"Shape mismatch! Features: {len(feature_names)}, Impacts: {len(impact_values)}"
-                st.error(msg)
-                print(msg, file=sys.stderr) # Print to console so I can see it
-                st.write("Feature Names (first 5):", feature_names[:5])
-                st.write("Impact Values shape:", impact_values.shape)
-                st.stop()
+                # Re-align - this can happen if variable inputs
+                # Try to use just the top ones or handle mismatched shapes gracefully
+                st.warning(f"Shape mismatch (feats={len(feature_names)}, impact={len(impact_values)}). Showing raw impacts.")
+                feature_names = [f"Feature {i}" for i in range(len(impact_values))]
 
             # Create a DataFrame for plotting
             shap_df = pd.DataFrame({

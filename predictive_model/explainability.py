@@ -2,52 +2,79 @@ import shap
 import pandas as pd
 import numpy as np
 
-def calculate_shap_values(model, X_train, X_test):
+def calculate_shap_values(model_artifact, X_train, X_test):
     """
-    Calculates SHAP values for the test set.
+    Calculates SHAP values for the test set, handling both Pipeline and GAM dictionary.
     
     Args:
-        model: The trained pipeline or model.
-        X_train: Training data (needed for some SHAP explainers).
+        model_artifact: The trained pipeline or GAM dictionary artifact.
+        X_train: Training data (needed for background distribution).
         X_test: Test data to explain.
         
     Returns:
         explainer: The SHAP explainer object.
         shap_values: The calculated SHAP values.
+        X_test_transformed: Transformed test data.
+        feature_names: Names of features after transformation.
     """
-    # Extract the classifier step from the pipeline
-    # Assuming the model is a Pipeline with 'pre' (preprocessor) and 'clf' (classifier)
-    if hasattr(model, 'named_steps'):
+    
+    # Check if it's our GAM dictionary artifact
+    if isinstance(model_artifact, dict) and "model" in model_artifact and "preprocess" in model_artifact:
+        model = model_artifact["model"]
+        preprocessor = model_artifact["preprocess"]
+        # label_encoder = model_artifact["label_encoder"] # Not needed for SHAP calculation directly
+        
+        # Transform data
+        # Ensure we cast to float for pygam
+        X_train_transformed = preprocessor.transform(X_train).astype(float)
+        X_test_transformed = preprocessor.transform(X_test).astype(float)
+        
+        # Get feature names
+        try:
+            feature_names = preprocessor.get_feature_names_out()
+        except AttributeError:
+             # Fallback if get_feature_names_out isn't available or fails
+             feature_names = [f"feat_{i}" for i in range(X_train_transformed.shape[1])]
+
+        # GAMs are additive, but pygam's implementation with sklearn API usually requires KernelExplainer
+        # for general probability outputs.
+        # Summarize background to speed up (GAMs can be slow with KernelExplainer)
+        # Using 10-20 k-means centroids as background is standard for speed/approximation
+        background = shap.kmeans(X_train_transformed, 10) 
+        
+        # We explain the probability of the positive class (usually index 1)
+        # gam.predict_proba returns (N, 2) or (N,). We need a function that returns the prob.
+        f = lambda x: model.predict_proba(x)
+        
+        explainer = shap.KernelExplainer(f, background)
+        # Calculate SHAP values
+        shap_values = explainer.shap_values(X_test_transformed)
+        
+        return explainer, shap_values, X_test_transformed, feature_names
+
+    # Legacy support for sklearn Pipeline (Baseline Model)
+    elif hasattr(model_artifact, 'named_steps'):
+        model = model_artifact
         classifier = model.named_steps['clf']
         preprocessor = model.named_steps['pre']
         
-        # We need to transform the data first because SHAP works on the features *seen* by the model
+        # Transform data
         X_train_transformed = preprocessor.transform(X_train)
         X_test_transformed = preprocessor.transform(X_test)
         
-        # Get feature names from the preprocessor
+        # Get feature names
         try:
             feature_names = preprocessor.get_feature_names_out()
         except AttributeError:
             feature_names = None
 
-        # Ensure feature names match the transformed data shape
         if feature_names is None or len(feature_names) != X_train_transformed.shape[1]:
              feature_names = [f"feature_{i}" for i in range(X_train_transformed.shape[1])]
 
-        # For Tree-based models (RandomForest, XGBoost, etc.)
-        # If it's LogisticRegression, we might need a different explainer (LinearExplainer)
         if "Forest" in str(type(classifier)) or "Tree" in str(type(classifier)):
              explainer = shap.TreeExplainer(classifier)
              shap_values = explainer.shap_values(X_test_transformed)
         else:
-            # Fallback for generic models (like Logistic Regression) using KernelExplainer or LinearExplainer
-            # Using LinearExplainer for speed if it's linear, otherwise Kernel (slow)
-            # For safety in this demo, let's use a generic approach or Linear if applicable
-            # But since we saw LogisticRegression in the baseline, let's try LinearExplainer with a summary of train data
-            # Note: LinearExplainer expects independent features, might be an approximation
-            
-            # Summarizing background data to speed up SHAP
             background = shap.kmeans(X_train_transformed, 10) 
             explainer = shap.KernelExplainer(classifier.predict_proba, background)
             shap_values = explainer.shap_values(X_test_transformed)
@@ -55,7 +82,7 @@ def calculate_shap_values(model, X_train, X_test):
         return explainer, shap_values, X_test_transformed, feature_names
 
     else:
-        raise ValueError("Model format not recognized. Expected a sklearn Pipeline.")
+        raise ValueError("Model format not recognized. Expected GAM dictionary or sklearn Pipeline.")
 
 def generate_genai_explanation(student_id, risk_prob, top_features):
     """
