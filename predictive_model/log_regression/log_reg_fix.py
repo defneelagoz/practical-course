@@ -10,7 +10,7 @@ from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score, make_scorer
 
 def infer_columns(df: pd.DataFrame):
@@ -22,7 +22,7 @@ def infer_columns(df: pd.DataFrame):
     num_cols = [c for c in df.columns if c not in cat_cols]
     return num_cols, cat_cols
 
-def plot_confusion_matrix(cm, labels, outpath="decision_tree_confusion_matrix_student2.png", title="Confusion Matrix"):
+def plot_confusion_matrix(cm, labels, outpath="confusion_matrix_student2.png", title="Confusion Matrix"):
     fig, ax = plt.subplots()
     im = ax.imshow(cm)
     ax.set_xticks(range(len(labels))); ax.set_yticks(range(len(labels)))
@@ -39,51 +39,37 @@ def plot_confusion_matrix(cm, labels, outpath="decision_tree_confusion_matrix_st
 def simple_fnr_fpr(cm, labels):
     """
     Calculates and returns per-class FNR and FPR.
-    cm: Confusion Matrix (true_label on rows, predicted on cols)
-    labels: List of class names
     """
-    tn = []
-    fp = []
-    fn = []
-    tp = []
-    
-    # Calculate for each class vs All
-    # This is a 'macro' boolean approach
     metric_res = {}
-    
     for i, label in enumerate(labels):
-        # Treat class i as Positive, others as Negative
         TP = cm[i, i]
         FN = np.sum(cm[i, :]) - TP
         FP = np.sum(cm[:, i]) - TP
         TN = np.sum(cm) - (TP + FP + FN)
         
-        # Rates
         fnr = FN / (FN + TP) if (FN + TP) > 0 else 0
         fpr = FP / (FP + TN) if (FP + TN) > 0 else 0
-        
         metric_res[label] = {"FNR": fnr, "FPR": fpr}
-        
     return metric_res
 
 def main():
-    parser = argparse.ArgumentParser(description="DT Fix with FNR/FPR")
+    parser = argparse.ArgumentParser(description="Logistic Regression Fix with FNR/FPR")
     parser.add_argument("--csv", default="student_data_2.csv")
     parser.add_argument("--test_size", type=float, default=0.20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--sep", default=";")
     args = parser.parse_args()
 
-    # --- Robust Path Search (Copied from gam_fix.py) ---
+    # --- Robust Path Search ---
     base_path = Path(__file__).parent.resolve() if "__file__" in locals() else Path().resolve()
     potential_dirs = [
         Path(args.csv).parent, 
         base_path, 
-        base_path / "decision_tree",
+        base_path / "log_regression",
         base_path.parent, 
-        base_path.parent / "gam", # It often lives here
+        base_path.parent / "gam",
         base_path.parent.parent,
-        Path("c:/Users/wwwut/practical-course/predictive_model/gam") # Fallback absolute
+        Path("c:/Users/wwwut/practical-course/predictive_model/gam") # Fallback
     ]
     csv_path = None
     seen = set()
@@ -97,12 +83,11 @@ def main():
             break
             
     if csv_path is None:
-        # Debug info
         print(f"Search failed. checked: {[str(d) for d in potential_dirs]}")
         raise FileNotFoundError("Could not find student_data_2.csv in common locations.")
     
-    output_dir = csv_path.parent / "decision_tree"
-    output_dir.mkdir(exist_ok=True, parents=True) # Ensure dir exists
+    output_dir = csv_path.parent / "log_regression"
+    output_dir.mkdir(exist_ok=True, parents=True)
 
     print("Loading CSV...")
     df = pd.read_csv(csv_path, sep=args.sep, decimal=',', engine="python", encoding="utf-8-sig")
@@ -116,7 +101,7 @@ def main():
     for p in possibles:
         if p in df.columns: target_col = p; break
     
-    # --- Robust Data Cleaning (Copied from gam_fix.py) ---
+    # --- Robust Data Cleaning ---
     y = df[target_col]
     X = df.drop(columns=[target_col])
     
@@ -146,7 +131,8 @@ def main():
         remainder="drop"
     )
     
-    clf = DecisionTreeClassifier(random_state=args.seed, class_weight="balanced")
+    # Logistic Regression Model from Notebook
+    clf = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=args.seed)
     pipe = Pipeline([("pre", pre), ("clf", clf)])
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=args.seed, stratify=y)
@@ -166,12 +152,12 @@ def main():
     cm = confusion_matrix(y_test, y_pred, labels=labels)
     
     # Save Outputs
-    plot_path = output_dir / "decision_tree_confusion_matrix_student2.png"
-    plot_confusion_matrix(cm, labels, str(plot_path), "Confusion Matrix - Decision Tree")
+    plot_path = output_dir / "confusion_matrix_student2.png"
+    plot_confusion_matrix(cm, labels, str(plot_path), "Confusion Matrix - Logistic Regression")
     print(f"Saved confusion matrix to {plot_path}")
     
     # Save Model
-    mod_path = output_dir / "decision_tree_model_student2.joblib"
+    mod_path = output_dir / "baseline_model_student2.joblib"
     joblib.dump(pipe, mod_path)
     print(f"Saved model to {mod_path}")
     
@@ -190,20 +176,15 @@ def main():
 
     sensitive_col = "Application_mode"
     if sensitive_col in X_test.columns:
-        # Dropout index
         dropout_idx = list(labels).index("Dropout") if "Dropout" in labels else 0
-        
         modes = sorted(X_test[sensitive_col].unique())
         for mode in modes:
             group_mask = (X_test[sensitive_col] == mode)
-            
             if group_mask.sum() < 5: continue
             
             y_true_group = y_test[group_mask]
             y_pred_group = y_pred[group_mask]
             
-            # Confusion Matrix for Group
-            # Force labels to be same as global to maintain shape
             cm_group = confusion_matrix(y_true_group, y_pred_group, labels=labels)
             
             TP = cm_group[dropout_idx, dropout_idx]

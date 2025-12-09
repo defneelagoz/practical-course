@@ -291,6 +291,56 @@ def main():
         print(f"  FNR (Miss Rate)      : {fnr:.4f}")
         print(f"  FPR (False Alarm)    : {fpr:.4f}")
 
+    # --- Fairness Analysis (Application_mode) ---
+    print("\n=== Fairness Analysis (Application_mode) ===")
+    print(f"{'App Mode':<10} | {'Count':<5} | {'FNR (Dropout)':<15} | {'FPR (Dropout)':<15}")
+    print("-" * 55)
+
+    # Ensure we use the test set indices to get the corresponding Application_mode
+    # X_test is a DataFrame, so we can access columns directly
+    sensitive_col = "Application_mode"
+    if sensitive_col in X_test.columns:
+        dropout_idx = list(labels).index("Dropout") if "Dropout" in labels else 0
+        
+        # Get unique modes present in the test set
+        modes = sorted(X_test[sensitive_col].unique())
+        
+        for mode in modes:
+            # Indices of this group in the TEST set
+            group_mask = (X_test[sensitive_col] == mode)
+            
+            if group_mask.sum() < 5: 
+                continue # Skip tiny groups
+                
+            # Subset true labels and predictions
+            y_true_group = y_test[group_mask]
+            y_pred_group = y_pred[group_mask]
+            
+            # Confusion Matrix for this group
+            # labels are [Dropout, Enrolled, Graduate] (or similar)
+            # We specifically care about Dropout vs Rest
+            
+            # We need to map y_true_group (integers) back to names? 
+            # y_test is already integer encoded by label_enc in previous steps?
+            # Wait, y_test in train_test_split was y_enc.
+            # So y_pred is also integer (from gam.predict).
+            
+            cm_group = confusion_matrix(y_true_group, y_pred_group, labels=range(len(labels)))
+            
+            # Calculate FNR/FPR for Dropout Class (dropout_idx)
+            # Class of interest = Positive
+            TP = cm_group[dropout_idx, dropout_idx]
+            FN = np.sum(cm_group[dropout_idx, :]) - TP
+            FP = np.sum(cm_group[:, dropout_idx]) - TP
+            TN = np.sum(cm_group) - (TP + FP + FN)
+             
+            fnr = FN / (FN + TP) if (FN + TP) > 0 else 0.0
+            fpr = FP / (FP + TN) if (FP + TN) > 0 else 0.0
+            
+            print(f"{str(mode):<10} | {group_mask.sum():<5} | {fnr:<15.4f} | {fpr:<15.4f}")
+    else:
+        print(f"Warning: '{sensitive_col}' not found in X_test features.")
+
     # full dataset
     X_full_pre = pre.transform(X).astype(np.float64)
     probs = gam.predict_proba(X_full_pre)
