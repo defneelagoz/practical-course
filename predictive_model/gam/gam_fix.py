@@ -262,10 +262,34 @@ def main():
 
     cm = confusion_matrix(y_test, y_pred)
     kappa = cohen_kappa_score(y_test, y_pred)
-    print(f"\n⭐ Cohen Kappa Score: {kappa:.4f}")
+    print(f"\n* Cohen Kappa Score: {kappa:.4f}")
 
     plot_confusion_matrix(cm, label_enc.classes_, str(args.cm_out))
-    print(f"🖼️ Saved confusion matrix to {args.cm_out}")
+    print(f"Saved confusion matrix to {args.cm_out}")
+
+    # --- FNR / FPR Metrics ---
+    print("\n=== FNR and FPR Metrics ===")
+    labels = label_enc.classes_
+    for i, label in enumerate(labels):
+        # Treat class i as Positive, others as Negative
+        # cm is (True, Pred)
+        # TP = cm[i, i]
+        # FN = sum(row i) - TP
+        # FP = sum(col i) - TP
+        # TN = total - (TP+FP+FN)
+        
+        TP = cm[i, i]
+        FN = np.sum(cm[i, :]) - TP
+        FP = np.sum(cm[:, i]) - TP
+        TN = np.sum(cm) - (TP + FP + FN)
+        
+        # Avoid division by zero
+        fnr = FN / (FN + TP) if (FN + TP) > 0 else 0
+        fpr = FP / (FP + TN) if (FP + TN) > 0 else 0
+        
+        print(f"Class '{label}':")
+        print(f"  FNR (Miss Rate)      : {fnr:.4f}")
+        print(f"  FPR (False Alarm)    : {fpr:.4f}")
 
     # full dataset
     X_full_pre = pre.transform(X).astype(np.float64)
@@ -278,10 +302,10 @@ def main():
     for i, c in enumerate(label_enc.classes_):
         out[f"p_{c}"] = probs[:, i]
     out.to_csv(args.pred_out, index=False)
-    print(f"✅ Wrote predictions to {args.pred_out}")
+    print(f"Wrote predictions to {args.pred_out}")
 
     joblib.dump({"model": gam, "preprocess": pre, "label_encoder": label_enc}, args.save_model)
-    print(f"💾 Saved GAM model to {args.save_model}")
+    print(f"Saved GAM model to {args.save_model}")
 
 if __name__ == "__main__":
     main()
