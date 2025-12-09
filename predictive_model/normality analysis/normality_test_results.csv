@@ -1,0 +1,22 @@
+Variable,Category,P-Value,Is Normal (p>0.05)
+Age at enrollment,Dropout,1.5872686630176095e-35,Not Normal
+Age at enrollment,Graduate,5.207900178756055e-58,Not Normal
+Age at enrollment,Enrolled,5.718446970036319e-36,Not Normal
+Curricular units 1st sem (enrolled),Dropout,1.1517344922876976e-42,Not Normal
+Curricular units 1st sem (enrolled),Graduate,7.761626019167845e-52,Not Normal
+Curricular units 1st sem (enrolled),Enrolled,1.9453721563576122e-33,Not Normal
+Curricular units 1st sem (approved),Dropout,6.84413659425661e-37,Not Normal
+Curricular units 1st sem (approved),Graduate,1.3035043939968129e-49,Not Normal
+Curricular units 1st sem (approved),Enrolled,1.2437394507165645e-18,Not Normal
+Curricular units 1st sem (grade),Dropout,2.3507273995929495e-38,Not Normal
+Curricular units 1st sem (grade),Graduate,1.5024624986743733e-27,Not Normal
+Curricular units 1st sem (grade),Enrolled,1.0577361522818063e-19,Not Normal
+Curricular units 2nd sem (enrolled),Dropout,3.7818192525239273e-41,Not Normal
+Curricular units 2nd sem (enrolled),Graduate,3.4455374877689325e-47,Not Normal
+Curricular units 2nd sem (enrolled),Enrolled,6.127150964641364e-32,Not Normal
+Curricular units 2nd sem (approved),Dropout,9.118505251044903e-41,Not Normal
+Curricular units 2nd sem (approved),Graduate,1.523269511302066e-42,Not Normal
+Curricular units 2nd sem (approved),Enrolled,1.0923227733043077e-13,Not Normal
+Curricular units 2nd sem (grade),Dropout,3.923301561319286e-43,Not Normal
+Curricular units 2nd sem (grade),Graduate,8.261186646938188e-27,Not Normal
+Curricular units 2nd sem (grade),Enrolled,1.8079801713620015e-20,Not Normal
