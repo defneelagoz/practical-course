@@ -13,6 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score, make_scorer
 
+
 def infer_columns(df: pd.DataFrame):
     cat_cols = list(df.select_dtypes(include=["object", "category"]).columns)
     for c in df.select_dtypes(include=["int64", "int32", "int16", "int8"]).columns:
