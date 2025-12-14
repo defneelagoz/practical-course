@@ -1,0 +1,9 @@
+
+streamlit
+pandas
+numpy
+joblib
+shap
+matplotlib
+pygam
+scikit-learn==1.5.2

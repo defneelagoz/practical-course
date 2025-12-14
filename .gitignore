@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Data & Models (Optional - common to ignore large files but keeping valid csvs/joblibs if small is ok, but typically ignored)
+# *.joblib
+# *.csv
+
+# Environment
+.env
+.venv
+env/
+venv/

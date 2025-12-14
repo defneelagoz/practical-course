@@ -12,6 +12,48 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from explainability import calculate_shap_values, generate_genai_explanation
 
+# --- Mappings ---
+application_mode_map = {
+    1: '1st phase - general contingent',
+    2: 'Ordinance No. 612/93',
+    3: '1st phase - special contingent (Azores Island)',
+    4: 'Holders of other higher courses',
+    5: 'Ordinance No. 854-B/99',
+    6: 'International student (bachelor)',
+    7: '1st phase - special contingent (Madeira Island)',
+    8: '2nd phase - general contingent',
+    9: '3rd phase - general contingent',
+    10: 'Ordinance No. 533-A/99 (Different Plan)',
+    11: 'Ordinance No. 533-A/99 (Other Institution)',
+    12: 'Over 23 years old',
+    13: 'Transfer',
+    14: 'Change of course',
+    15: 'Technological specialization diploma holders',
+    16: 'Change of institution/course',
+    17: 'Short cycle diploma holders',
+    18: 'Change of institution/course (International)'
+}
+
+course_map = {
+    33: 'Biofuel Production Technologies',
+    171: 'Animation and Multimedia Design',
+    8014: 'Social Service (evening attendance)',
+    9003: 'Agronomy',
+    9070: 'Communication Design',
+    9085: 'Veterinary Nursing',
+    9119: 'Informatics Engineering',
+    9130: 'Equinculture',
+    9147: 'Management',
+    9238: 'Social Service',
+    9254: 'Tourism',
+    9500: 'Nursing',
+    9556: 'Oral Hygiene',
+    9670: 'Advertising and Marketing Management',
+    9773: 'Journalism and Communication',
+    9853: 'Basic Education',
+    9991: 'Management (evening attendance)'
+}
+
 # Page Config
 st.set_page_config(page_title="Student Success Dashboard", layout="wide")
 
@@ -124,6 +166,9 @@ if model_artifact is not None and df is not None:
     
     # Predict
     # GAM needs preprocessed data
+    classes = None  # Safe initialization
+    probs = None
+
     try:
         student_data_pre = preprocessor.transform(student_data).astype(float)
         probs = model.predict_proba(student_data_pre)
@@ -132,6 +177,10 @@ if model_artifact is not None and df is not None:
         st.error(f"Prediction Error: {e}")
         st.stop()
     
+    if classes is None or probs is None:
+        st.error("Model prediction failed. Check logs.")
+        st.stop()
+
     # Find index of "Dropout" class
     dropout_idx = list(classes).index("Dropout") if "Dropout" in classes else 0
     # Handle prob shape (n_samples, n_classes) or (n_samples,) if binary
@@ -159,7 +208,27 @@ if model_artifact is not None and df is not None:
     
     with col1:
         st.subheader("Student Profile")
-        st.dataframe(student_data)
+        
+        # Create a display copy to show readable labels
+        display_data = student_data.copy()
+        if "Application_mode" in display_data.columns:
+             # Check if numeric to map, handle strings if already mapped
+             display_data["Application_mode"] = display_data["Application_mode"].apply(
+                 lambda x: application_mode_map.get(int(x), x) if str(x).replace('.','').isdigit() else x
+             )
+        # Fallback if column name has spaces
+        elif "Application mode" in display_data.columns:
+             display_data["Application mode"] = display_data["Application mode"].apply(
+                 lambda x: application_mode_map.get(int(x), x) if str(x).replace('.','').isdigit() else x
+             )
+        
+        # Course Map
+        if "Course" in display_data.columns:
+             display_data["Course"] = display_data["Course"].apply(
+                 lambda x: course_map.get(int(x), x) if str(x).replace('.','').isdigit() else x
+             )
+
+        st.dataframe(display_data)
         
         st.subheader("Model Explainability (SHAP)")
         with st.spinner("Calculating SHAP values..."):
@@ -231,3 +300,7 @@ if model_artifact is not None and df is not None:
 
 else:
     st.warning("Please ensure the model is trained and data is available.")
+
+if __name__ == "__main__":
+    print("WARNING: You are running this script directly with Python.")
+    print("Please run this app using: streamlit run predictive_model/dashboard.py")
