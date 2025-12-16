@@ -148,6 +148,29 @@ def load_resources():
             
     return model_artifact, df
 
+def clean_feature_name(name):
+    """Cleans technical feature names (e.g. cat__Course_12) into readable text."""
+    # Remove Sklearn/PyGAM prefixes
+    name = name.replace("cat__", "").replace("num__", "")
+    
+    # Check for One-Hot suffix (usually _<number>)
+    # But be careful with names that naturally end in numbers like "sem_1"
+    # Usually one-hot encoding appends an underscore and the value.
+    parts = name.rsplit('_', 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        base = parts[0].replace("_", " ")
+        val = parts[1]
+        
+        # Optional: Try to map specific columns if known
+        if "Course" in base:
+            val = course_map.get(int(val), val)
+        elif "Application mode" in base:
+             val = application_mode_map.get(int(val), val)
+             
+        return f"{base}: {val}"
+        
+    return name.replace("_", " ")
+
 model_artifact, df = load_resources()
 
 if model_artifact is not None and df is not None:
@@ -372,7 +395,7 @@ if model_artifact is not None and df is not None:
 
             # Create a DataFrame for plotting
             shap_df = pd.DataFrame({
-                "Feature": feature_names,
+                "Feature": [clean_feature_name(f) for f in feature_names],
                 "Impact": impact_values
             })
             shap_df["AbsImpact"] = shap_df["Impact"].abs()
