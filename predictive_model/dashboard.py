@@ -179,11 +179,72 @@ if model_artifact is not None and df is not None:
     high_risk_threshold = st.sidebar.slider("High Risk Threshold", 0.0, 1.0, 0.7, 0.05)
     low_risk_threshold = st.sidebar.slider("Safe Threshold", 0.0, 1.0, 0.3, 0.05)
     
-    # Student Selector
-    student_index = st.sidebar.selectbox("Select Student Index", X.index)
+    # Data Source Selection
+    data_source = st.sidebar.radio("Data Source", ["Select Existing Student", "Simulate New Student"])
+
+    if data_source == "Select Existing Student":
+        # Student Selector
+        student_index = st.sidebar.selectbox("Select Student Index", X.index)
+        # Get selected student data
+        student_data = X.loc[[student_index]]
     
-    # Get selected student data
-    student_data = X.loc[[student_index]]
+    else:
+        st.sidebar.markdown("### Simulate Student")
+        student_index = "Simulated_User"
+        
+        # --- INPUT FORM ---
+        # 1. Application Mode (Reverse Map for UI)
+        # Create reverse map: "Name": ID
+        app_mode_rev = {v: k for k, v in application_mode_map.items()}
+        # Add any missing values from X that might not be in the map (just in case)
+        # valid_app_modes = sorted(list(app_mode_rev.keys()))
+        s_app_mode_label = st.sidebar.selectbox("Application Mode", options=list(app_mode_rev.keys()))
+        s_app_mode = app_mode_rev[s_app_mode_label]
+
+        # 2. Course
+        course_rev = {v: k for k, v in course_map.items()}
+        # Add generic options for ids 1-17 if map is incomplete, but we fixed it.
+        s_course_label = st.sidebar.selectbox("Course", options=list(course_rev.keys()))
+        s_course = course_rev[s_course_label]
+
+        # 3. Tuition Fees
+        s_tuition = st.sidebar.selectbox("Tuition fees up to date?", ["Yes", "No"])
+        s_tuition_val = 1 if s_tuition == "Yes" else 0
+
+        # 4. Age
+        s_age = st.sidebar.number_input("Age at enrollment", min_value=17, max_value=70, value=20)
+
+        # 5. Grades & Units (1st Sem)
+        st.sidebar.markdown("#### 1st Semester")
+        s_u1_enrolled = st.sidebar.number_input("Units Enrolled (1st)", 0, 20, 5)
+        s_u1_approved = st.sidebar.number_input("Units Approved (1st)", 0, 20, 5)
+        s_u1_grade = st.sidebar.number_input("Grade Avg (1st)", 0.0, 20.0, 14.0)
+
+        # 6. Grades & Units (2nd Sem)
+        st.sidebar.markdown("#### 2nd Semester")
+        s_u2_enrolled = st.sidebar.number_input("Units Enrolled (2nd)", 0, 20, 5)
+        s_u2_approved = st.sidebar.number_input("Units Approved (2nd)", 0, 20, 5)
+        s_u2_grade = st.sidebar.number_input("Grade Avg (2nd)", 0.0, 20.0, 14.0)
+
+        # Construct DataFrame with EXACT columns as X
+        # We need to match the Training Data Columns exactly
+        # Columns: ['Application mode', 'Course', 'Tuition fees up to date', 'Age at enrollment', 
+        #           'Curricular units 1st sem (enrolled)', 'Curricular units 1st sem (approved)', 'Curricular units 1st sem (grade)', 
+        #           'Curricular units 2nd sem (enrolled)', 'Curricular units 2nd sem (approved)', 'Curricular units 2nd sem (grade)']
+        
+        sim_data = {
+            'Application_mode': [s_app_mode],
+            'Course': [s_course],
+            'Tuition_fees_up_to_date': [s_tuition_val],
+            'Age_at_enrollment': [s_age],
+            'Curricular_units_1st_sem_(enrolled)': [s_u1_enrolled],
+            'Curricular_units_1st_sem_(approved)': [s_u1_approved],
+            'Curricular_units_1st_sem_(grade)': [s_u1_grade],
+            'Curricular_units_2nd_sem_(enrolled)': [s_u2_enrolled],
+            'Curricular_units_2nd_sem_(approved)': [s_u2_approved],
+            'Curricular_units_2nd_sem_(grade)': [s_u2_grade]
+        }
+        student_data = pd.DataFrame(sim_data) # This will be used by the rest of the app
     
     # Predict
     # GAM needs preprocessed data
