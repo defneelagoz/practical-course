@@ -6,6 +6,7 @@ import shap
 import matplotlib.pyplot as plt
 import os
 import sys
+import subprocess
 
 # Add current directory to path to import local modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -35,23 +36,23 @@ application_mode_map = {
 }
 
 course_map = {
-    33: 'Biofuel Production Technologies',
-    171: 'Animation and Multimedia Design',
-    8014: 'Social Service (evening attendance)',
-    9003: 'Agronomy',
-    9070: 'Communication Design',
-    9085: 'Veterinary Nursing',
-    9119: 'Informatics Engineering',
-    9130: 'Equinculture',
-    9147: 'Management',
-    9238: 'Social Service',
-    9254: 'Tourism',
-    9500: 'Nursing',
-    9556: 'Oral Hygiene',
-    9670: 'Advertising and Marketing Management',
-    9773: 'Journalism and Communication',
-    9853: 'Basic Education',
-    9991: 'Management (evening attendance)'
+    1: 'Biofuel Production Technologies',
+    2: 'Animation and Multimedia Design', 
+    3: 'Social Service (evening attendance)',
+    4: 'Agronomy',
+    5: 'Communication Design',
+    6: 'Veterinary Nursing',
+    7: 'Informatics Engineering',
+    8: 'Equinculture',
+    9: 'Management',
+    10: 'Social Service',
+    11: 'Tourism',
+    12: 'Nursing',
+    13: 'Oral Hygiene',
+    14: 'Advertising and Marketing Management',
+    15: 'Journalism and Communication',
+    16: 'Basic Education',
+    17: 'Management (evening attendance)'
 }
 
 # Page Config
@@ -81,8 +82,28 @@ def load_resources():
     try:
         model_artifact = joblib.load(model_path)
     except Exception as e:
-        st.error(f"Failed to load model: {e}")
-        return None, None
+        # Auto-Recovery Logic
+        st.warning(f"Model load failed ({e}). Attempting to auto-fix for your device...")
+        
+        try:
+            # Locate the fix script
+            fix_script = os.path.join(os.path.dirname(__file__), "gam", "gam_fix.py")
+            if not os.path.exists(fix_script):
+                 st.error(f"Cannot find fix script at {fix_script}")
+                 return None, None
+            
+            # Run it
+            process = subprocess.run([sys.executable, fix_script], capture_output=True, text=True)
+            if process.returncode != 0:
+                st.error(f"Auto-fix failed:\n{process.stderr}")
+                return None, None
+                
+            st.success("Model optimized! Reloading...")
+            model_artifact = joblib.load(model_path)
+            
+        except Exception as e2:
+             st.error(f"Fatal error loading model: {e2}")
+             return None, None
 
     if not isinstance(model_artifact, dict):
         st.error("Model file format unexpected. Expected a dictionary from gam_fix.py.")
@@ -208,6 +229,26 @@ if model_artifact is not None and df is not None:
     
     with col1:
         st.subheader("Student Profile")
+
+        # --- Representative Data Check ---
+        # Get raw values for the selected student
+        sel_course = student_data["Course"].iloc[0] if "Course" in student_data.columns else None
+        
+        # Handle App Mode name variation
+        app_mode_col = "Application_mode" if "Application_mode" in student_data.columns else ("Application mode" if "Application mode" in student_data.columns else None)
+        sel_app_mode = student_data[app_mode_col].iloc[0] if app_mode_col else None
+
+        # Check counts in the FULL dataset (X)
+        if sel_course is not None:
+            course_count = X[X["Course"] == sel_course].shape[0]
+            if course_count < 50:
+                st.warning(f"⚠️ Low Sample Size: This Course has only {course_count} students. Predictions may be less reliable.")
+
+        if sel_app_mode is not None:
+            app_count = X[X[app_mode_col] == sel_app_mode].shape[0]
+            if app_count < 50:
+                st.warning(f"⚠️ Low Sample Size: This Application Mode has only {app_count} students. Predictions may be less reliable.")
+
         
         # Create a display copy to show readable labels
         display_data = student_data.copy()

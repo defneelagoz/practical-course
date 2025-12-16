@@ -6,4 +6,4 @@ joblib
 shap
 matplotlib
 pygam
-scikit-learn==1.5.2
+scikit-learn
