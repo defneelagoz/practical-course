@@ -422,8 +422,9 @@ if model_artifact is not None and df is not None:
                 # Check criteria
                 is_categorical_feature = ("Course" in clean_name or "Application mode" in clean_name or "Tuition" in clean_name)
                 is_inactive = (abs(val) < 0.01) # effectively 0
-                
-                if is_categorical_feature and is_inactive:
+                has_no_impact = (abs(impact) < 0.001) # effectively 0 impact
+
+                if (is_categorical_feature and is_inactive) or has_no_impact:
                     continue # SKIP IT
                 
                 filtered_data.append({"Feature": clean_name, "Impact": impact})
