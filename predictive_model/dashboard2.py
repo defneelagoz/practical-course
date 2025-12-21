@@ -431,14 +431,64 @@ if model_artifact is not None and df is not None:
             
             # Create a DataFrame for plotting
             shap_df = pd.DataFrame(filtered_data)
-            shap_df["AbsImpact"] = shap_df["Impact"].abs()
-            shap_df = shap_df.sort_values("AbsImpact", ascending=False).head(10)
             
-            fig, ax = plt.subplots()
-            colors = ['red' if x > 0 else 'blue' for x in shap_df['Impact']]
-            ax.barh(shap_df['Feature'], shap_df['Impact'], color=colors)
-            ax.set_xlabel("Impact on Dropout Risk (SHAP Value)")
-            st.pyplot(fig)
+            if not shap_df.empty:
+                # Split into Risk (Positive) and Protective (Negative)
+                risk_df = shap_df[shap_df["Impact"] > 0].sort_values("Impact", ascending=True)
+                protective_df = shap_df[shap_df["Impact"] < 0].sort_values("Impact", ascending=False)
+                
+                # Unified Scale calculation
+                max_val = 0
+                if not shap_df.empty:
+                    max_val = shap_df["Impact"].abs().max()
+                limit = max_val * 1.1 if max_val > 0 else 0.1
+                
+                # Create Columns - RISK ON LEFT, PROTECTIVE ON RIGHT
+                col_risk, col_prot = st.columns(2)
+                
+                # Create Columns - RISK ON LEFT, PROTECTIVE ON RIGHT
+                col_risk, col_prot = st.columns(2)
+                
+                # Function to calculate consistent height PER PLOT
+                # This ensures bars have same thickness but figure wraps tightly around them
+                def get_plot_height(n_bars):
+                    # 0.5 unit per bar + 1.0 buffer for labels
+                    return max(n_bars * 0.5 + 1.0, 2.0)
+
+                with col_risk:
+                    st.markdown("#### ⚠️ Risk Factors")
+                    if not risk_df.empty:
+                        # Calculate height specific to THIS plot's bar count
+                        h_risk = get_plot_height(len(risk_df))
+                        fig_r, ax_r = plt.subplots(figsize=(5, h_risk))
+                        
+                        ax_r.barh(risk_df['Feature'], risk_df['Impact'], color='red', height=0.6)
+                        ax_r.set_xlim([0, limit])
+                        ax_r.set_xlabel("Impact (Increases Risk)")
+                        ax_r.spines['right'].set_visible(False)
+                        ax_r.spines['top'].set_visible(False)
+                        st.pyplot(fig_r)
+                    else:
+                        st.info("No major risk factors found.")
+                        
+                with col_prot:
+                    st.markdown("#### 🛡️ Protective Factors")
+                    if not protective_df.empty:
+                        # Calculate height specific to THIS plot's bar count
+                        h_prot = get_plot_height(len(protective_df))
+                        fig_p, ax_p = plt.subplots(figsize=(5, h_prot))
+                        
+                        ax_p.barh(protective_df['Feature'], protective_df['Impact'], color='green', height=0.6)
+                        ax_p.set_xlim([0, -limit]) 
+                        ax_p.set_xlabel("Impact (Reduces Risk)")
+                        ax_p.spines['left'].set_visible(False)
+                        ax_p.spines['right'].set_visible(False)
+                        ax_p.spines['top'].set_visible(False)
+                        st.pyplot(fig_p)
+                    else:
+                        st.info("No major protective factors found.")
+            else:
+                st.info("No significant features influenced this prediction.")
             
     with col2:
         st.subheader("🤖 GenAI Insight")
