@@ -59,7 +59,7 @@ course_map = {
 st.set_page_config(page_title="Student Success Dashboard (v2 - 5Fold)", layout="wide")
 
 # Title
-st.title("🎓 Student Success & Dropout Risk Dashboard (Real 5-Fold Model)")
+st.title("🎓 Student Success & Dropout Risk Dashboard")
 st.markdown("---")
 
 # Sidebar
@@ -368,15 +368,21 @@ if model_artifact is not None and df is not None:
             
             # SHAP values for the specific class (Dropout)
             if isinstance(shap_vals, list):
-                # Multi-class
-                # If pygam returns list, check length
+                # Multi-class output from KernelExplainer
                 if len(shap_vals) > dropout_idx:
                     sv = shap_vals[dropout_idx]
                 else:
                     sv = shap_vals[0] # Fallback
             else:
                 # Binary / single array
+                # For PyGAM binary, this usually explains P(y=1) (e.g., Graduate)
+                # If 'Dropout' is Class 0, we need to INVERT the SHAP values 
+                # to explain P(Dropout).
                 sv = shap_vals
+                if probs.ndim == 1 and classes[1] != "Dropout":
+                     # Model explains "Graduate". We want "Dropout".
+                     # Invert the impact.
+                     sv = -1 * sv
                 
             # Force Plot / Bar Plot logic
             st.markdown("**Why did the model make this prediction?**")
@@ -394,11 +400,36 @@ if model_artifact is not None and df is not None:
                 st.warning(f"Shape mismatch (feats={len(feature_names)}, impact={len(impact_values)}). Showing raw impacts.")
                 feature_names = [f"Feature {i}" for i in range(len(impact_values))]
 
+            # Retrieve the input values for this student
+            # X_transformed is returned by calculate_shap_values
+            # Ideally X_transformed corresponds to the X_test we passed (student_data)
+            # which is 1 row.
+            
+            student_inputs = X_transformed[0] if X_transformed.ndim > 1 else X_transformed
+            
+            # Filter Logic:
+            # We want to HIDE features that are:
+            # 1. Categorical (Course, App Mode)
+            # 2. AND have a value of 0 (False)
+            
+            filtered_data = []
+            
+            for i, name in enumerate(feature_names):
+                clean_name = clean_feature_name(name)
+                val = student_inputs[i] if i < len(student_inputs) else 0
+                impact = impact_values[i]
+                
+                # Check criteria
+                is_categorical_feature = ("Course" in clean_name or "Application mode" in clean_name or "Tuition" in clean_name)
+                is_inactive = (abs(val) < 0.01) # effectively 0
+                
+                if is_categorical_feature and is_inactive:
+                    continue # SKIP IT
+                
+                filtered_data.append({"Feature": clean_name, "Impact": impact})
+            
             # Create a DataFrame for plotting
-            shap_df = pd.DataFrame({
-                "Feature": [clean_feature_name(f) for f in feature_names],
-                "Impact": impact_values
-            })
+            shap_df = pd.DataFrame(filtered_data)
             shap_df["AbsImpact"] = shap_df["Impact"].abs()
             shap_df = shap_df.sort_values("AbsImpact", ascending=False).head(10)
             

@@ -23,9 +23,18 @@ except ImportError:
 
 def infer_columns(df: pd.DataFrame):
     cat_cols = list(df.select_dtypes(include=["object", "category"]).columns)
+    
+    # Keywords that indicate a column should ALWAYS be numeric, 
+    # even if it has few unique values (e.g. grades 0-20)
+    force_numeric_keywords = ["age", "units", "grade", "enrolled", "approved"]
+    
     for c in df.select_dtypes(include=["int64", "int32", "int16", "int8"]).columns:
-        if df[c].nunique() <= 20:
+        # Check if column matches any forced numeric keywords (case-insensitive)
+        is_forced_numeric = any(k in c.lower() for k in force_numeric_keywords)
+        
+        if not is_forced_numeric and df[c].nunique() <= 20:
             cat_cols.append(c)
+            
     cat_cols = sorted(set(cat_cols))
     num_cols = [c for c in df.columns if c not in cat_cols]
     return num_cols, cat_cols

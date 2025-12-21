@@ -57,7 +57,7 @@ course_map = {
 st.set_page_config(page_title="Student Success Dashboard (In-Work)", layout="wide")
 
 # Title
-st.title("🎓 Student Success Dashboard (Core Only)")
+st.title("🎓 Student Success Dashboard")
 st.markdown("---")
 
 # Sidebar
